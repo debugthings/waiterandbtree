@@ -202,14 +202,15 @@ namespace NETBTree
         {
             btreenode parentOfNodeToDelete = null;
             btreenode nodeToDelete = FindNodeAndParent(val, this.root, out parentOfNodeToDelete);
-            parentOfNodeToDelete.srwlck.EnterWrite();
+            if (parentOfNodeToDelete != null)
+                parentOfNodeToDelete.srwlck.EnterWrite();
             if (nodeToDelete == null)
             {
                 parentOfNodeToDelete.srwlck.LeaveWrite();
                 return false;
             }
             // Lock above found node as we will alter parent.
-
+            nodeToDelete.srwlck.EnterWrite();
             if (nodeToDelete.left == null && nodeToDelete.right == null)
             {
                 if (parentOfNodeToDelete.left == nodeToDelete)
@@ -250,7 +251,9 @@ namespace NETBTree
                     nodeToDelete.right = srch.right;
                 }
             }
-            parentOfNodeToDelete.srwlck.LeaveWrite();
+            nodeToDelete.srwlck.LeaveWrite();
+            if (parentOfNodeToDelete != null)
+                parentOfNodeToDelete.srwlck.LeaveWrite();
             return true;
         }
         private btreenode FindNodeAndParent(int val, btreenode btn, out btreenode parent)
@@ -315,6 +318,7 @@ namespace NETBTree
     class Program
     {
         static System.Collections.Generic.List<Task> wh = new List<Task>();
+        static object swlock = new object();
         static void Main(string[] args)
         {
             var rand = new Random();
@@ -322,16 +326,31 @@ namespace NETBTree
 
             var sw = new System.Diagnostics.Stopwatch();
 
+            int[] range = Enumerable.Range(1, (int)Math.Pow(2.0, 23)).ToArray();
+            sw.Restart();
+            var btTestNoLookupSTRand = new btree(lockhelp);
+            RandomRangeInsert(btTestNoLookupSTRand, range, sw, true);
+            sw.Stop();
+            Console.WriteLine("Random insert single threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
+
+            sw.Restart();
+            var btTestNoLookupRand = new btree(lockhelp);
+            RandomRangeInsert(btTestNoLookupRand, range, sw);
+            Task.WaitAll(wh.ToArray());
+            sw.Stop();
+            wh.Clear();
+            Console.WriteLine("Random insert multi threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
+
             sw.Restart();
             var btTestNoLookupsST = new btree(lockhelp);
-            BalancedRangeInsert(btTestNoLookupsST, Enumerable.Range(1, (int)Math.Pow(2.0, 23)).ToArray(), true);
+            BalancedRangeInsert(btTestNoLookupsST, range, sw, true);
             sw.Stop();
             Console.WriteLine("Balanced insert single threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
 
 
             sw.Restart();
             var btTestNoLookups = new btree(lockhelp);
-            BalancedRangeInsert(btTestNoLookups, Enumerable.Range(1, (int)Math.Pow(2.0, 23)).ToArray());
+            BalancedRangeInsert(btTestNoLookups, range, sw);
             Task.WaitAll(wh.ToArray());
             sw.Stop();
             wh.Clear();
@@ -339,15 +358,24 @@ namespace NETBTree
 
             sw.Restart();
             var bttest = new btree(lockhelp);
-            BalancedRangeInsert(bttest, Enumerable.Range(1, (int)Math.Pow(2.0, 23)).ToArray());
+            BalancedRangeInsert(bttest, range, sw);
 
             var cts = new System.Threading.CancellationTokenSource();
             var t = new Task(() =>
             {
+                bool contains = true;
                 while (!cts.IsCancellationRequested)
                 {
-                    bttest.Contains(rand.Next(1, (int)Math.Pow(2.0, 22)));
+                    contains &= bttest.Contains(rand.Next(1, (int)Math.Pow(2.0, 22)));
                     System.Threading.Thread.Sleep(1);
+                }
+                if (contains)
+                {
+                    Console.WriteLine("We found all of the values");
+                }
+                else
+                {
+                    Console.WriteLine("We did not find all of the values");
                 }
             }, cts.Token);
 
@@ -369,7 +397,7 @@ namespace NETBTree
 
         }
 
-        static void BalancedRangeInsert(btree bt, int[] range, bool recursv = false)
+        static void BalancedRangeInsert(btree bt, int[] range, System.Diagnostics.Stopwatch sw, bool recursv = false)
         {
             int constthread = 4;
             if (range.Length > (2 ^ 8) && !recursv)
@@ -383,15 +411,15 @@ namespace NETBTree
                 }
 
 
-                for (int i = 1, cnt = 1; cnt <= constthread; i += (range.Length / constthread), cnt++)
+                for (int i = 1, cnt = 1; cnt <= constthread; cnt++)
                 {
                     int start = i;
                     int end = (range.Length / constthread) * cnt;
+                    i = end;
                     var t = new Task(() =>
                     {
-                        int[] rng = Enumerable.Range(start, end).ToArray();
-                        BalancedRangeInsert(bt, rng, true);
-                        Console.WriteLine("Balanced insert of {0} to {1} complete.", start, end);
+                        int[] rng = Enumerable.Range(start, end - start).ToArray();
+                        BalancedRangeInsert(bt, rng, sw, true);
                     });
                     t.Start();
                     wh.Add(t);
@@ -400,6 +428,7 @@ namespace NETBTree
             }
             else
             {
+                var sw2 = new System.Diagnostics.Stopwatch();
                 for (int i = 2; i < range.Length; i *= 2)
                 {
                     for (int j = (range.Length / i); j < range.Length; j += (range.Length / i))
@@ -412,16 +441,15 @@ namespace NETBTree
                         }
                         if (j != skip)
                         {
+                            sw2.Start();
                             bt.Insert(range[j]);
+                            sw2.Stop();
                         }
-
                     }
+                    //Console.WriteLine("Time taken to balance insert {0} nodes: {1}ms", range.Length, sw2.Elapsed.TotalMilliseconds);
                 }
 
-                //for (int i = 1; i < range.Length; i++)
-                //{
-                //    bt.Insert(range[i]);
-                //}
+
             }
 
         }
@@ -463,6 +491,41 @@ namespace NETBTree
             }
         }
 
+        static void RandomRangeInsert(btree bt, int[] range, System.Diagnostics.Stopwatch sw, bool recursv = false)
+        {
+            int constthread = 4;
+            if (range.Length > (2 ^ 8) && !recursv)
+            {
+                for (int i = 1, cnt = 1; cnt <= constthread; cnt++)
+                {
+                    int start = i;
+                    int end = (range.Length / constthread) * cnt;
+                    i = end;
+                    var t = new Task(() =>
+                    {
+                        int[] rng = Enumerable.Range(start, end - start).ToArray();
+                        RandomRangeInsert(bt, rng, sw, true);
+                    });
+                    t.Start();
+                    wh.Add(t);
+                }
+
+            }
+            else
+            {
+                var sw2 = new System.Diagnostics.Stopwatch();
+                var rand = new Random();
+                for (int j = 0; j < range.Length; j++)
+                {
+                    int rnd = rand.Next(range.First(), range.Last());
+                    sw2.Start();
+                    bt.Insert(rnd);
+                    sw2.Stop();
+                }
+                //Console.WriteLine("Time taken to randomly insert {0} nodes: {1}ms", range.Length, sw2.Elapsed.TotalMilliseconds);
+            }
+
+        }
     }
 }
 

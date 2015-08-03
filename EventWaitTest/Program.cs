@@ -75,6 +75,12 @@ namespace EventWithCallbackDemo
 
     class MainClass
     {
+        public static void timercb(object cbobj)
+        {
+            EventWithCallback ewcb = cbobj as EventWithCallback;
+            ewcb.Pulse(o => { Console.WriteLine("Hello {0} | Actual Thread {1:X}", o, System.Threading.Thread.CurrentThread.GetHashCode()); });
+            GC.Collect();
+        }
         public static void Main(string[] args)
         {
 
@@ -88,20 +94,16 @@ namespace EventWithCallbackDemo
                 }));
                 t.Start();
             }
-           
-            ec.Pulse(o => { Console.WriteLine("Hello {0} | Actual Thread {1:X}", o, System.Threading.Thread.CurrentThread.GetHashCode()); });
+
+            var timer = new System.Threading.Timer(new System.Threading.TimerCallback(timercb), ec, 0, 2000);
+            Console.ReadLine();
+            timer.Dispose();
             
-            Console.ReadLine();
-            GC.Collect();
-            ec.Pulse(o => { Console.WriteLine("Hello {0} | Actual Thread {1:X}", o, System.Threading.Thread.CurrentThread.GetHashCode()); });
-            Console.ReadLine();
-            GC.Collect();
-            ec.Pulse(o => { Console.WriteLine("Hello {0} | Actual Thread {1:X}", o, System.Threading.Thread.CurrentThread.GetHashCode()); });
-            Console.ReadLine();
-            GC.Collect();
-            ec.PulseAll(o => { Console.WriteLine("Pulse all Hello {0} | Actual Thread {1:X}", o, System.Threading.Thread.CurrentThread.GetHashCode()); });
-            Console.ReadLine();
-            GC.Collect();
+        }
+
+        private static void St_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
+        {
+            throw new NotImplementedException();
         }
     }
 }
