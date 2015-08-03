@@ -1,5 +1,5 @@
 ##Event Broadcast
- 1. The solution appears to be scalable up to any number of waiters and “pulsers”. However, there is an upper bound. Right now I have each thread waking up ever 1ms to check it's status. This is inefficient at the user level  and would be better served by an event/signal mechanism. There is a good amount of contention against the monitor, so if we were to release thousands upon thousands of these callbacks it would only get worse.
+ 1. The solution appears to be scalable up to any number of waiters and “pulsers”. However, there is an upper bound. Right now I have each thread waking up every 1ms to check its status. This is inefficient at the user level and would be better served by an event/signal mechanism. There is a good amount of contention against the monitor, so if we were to release thousands upon thousands of these callbacks it would only get worse.
  
  2. Depending on how things are JITted it's possible a cached version of a variable could be used when passing it across the thread boundaries. This is easily fixed by adding more locking or using a volatile variable.
  
