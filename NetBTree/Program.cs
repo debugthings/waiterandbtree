@@ -238,6 +238,9 @@ namespace NETBTree
                 btreenode prev = null;
                 while (srch.left != null)
                 {
+                    srch.srwlck.EnterRead();
+                    if (prev != null)
+                        prev.srwlck.LeaveRead();
                     prev = srch;
                     srch = srch.left;
                 }
@@ -245,6 +248,7 @@ namespace NETBTree
                 if (prev != null)
                 {
                     prev.left = null;
+                    prev.srwlck.LeaveRead();
                 }
                 else
                 {
@@ -321,80 +325,74 @@ namespace NETBTree
         static object swlock = new object();
         static void Main(string[] args)
         {
-            var rand = new Random();
-            LockHelper lockhelp = new MonitorLockHelper();
-
-            var sw = new System.Diagnostics.Stopwatch();
-
-            int[] range = Enumerable.Range(1, (int)Math.Pow(2.0, 23)).ToArray();
-            sw.Restart();
-            var btTestNoLookupSTRand = new btree(lockhelp);
-            RandomRangeInsert(btTestNoLookupSTRand, range, sw, true);
-            sw.Stop();
-            Console.WriteLine("Random insert single threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
-
-            sw.Restart();
-            var btTestNoLookupRand = new btree(lockhelp);
-            RandomRangeInsert(btTestNoLookupRand, range, sw);
-            Task.WaitAll(wh.ToArray());
-            sw.Stop();
-            wh.Clear();
-            Console.WriteLine("Random insert multi threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
-
-            sw.Restart();
-            var btTestNoLookupsST = new btree(lockhelp);
-            BalancedRangeInsert(btTestNoLookupsST, range, sw, true);
-            sw.Stop();
-            Console.WriteLine("Balanced insert single threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
-
-
-            sw.Restart();
-            var btTestNoLookups = new btree(lockhelp);
-            BalancedRangeInsert(btTestNoLookups, range, sw);
-            Task.WaitAll(wh.ToArray());
-            sw.Stop();
-            wh.Clear();
-            Console.WriteLine("Balanced insert multi threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
-
-            sw.Restart();
-            var bttest = new btree(lockhelp);
-            BalancedRangeInsert(bttest, range, sw);
-
-            var cts = new System.Threading.CancellationTokenSource();
-            var t = new Task(() =>
+            for (int i = 0; i < 20; i++)
             {
-                bool contains = true;
-                while (!cts.IsCancellationRequested)
-                {
-                    contains &= bttest.Contains(rand.Next(1, (int)Math.Pow(2.0, 22)));
-                    System.Threading.Thread.Sleep(1);
-                }
-                if (contains)
-                {
-                    Console.WriteLine("We found all of the values");
-                }
-                else
-                {
-                    Console.WriteLine("We did not find all of the values");
-                }
-            }, cts.Token);
 
-            var t2 = new Task(() =>
-            {
-                while (!cts.IsCancellationRequested)
-                {
-                    bttest.Remove(rand.Next(1, (int)Math.Pow(2.0, 22)));
-                    System.Threading.Thread.Sleep(1);
-                }
-            }, cts.Token);
-            t2.Start();
-            Task.WaitAll(wh.ToArray());
-            sw.Stop();
-            cts.Cancel();
-            Console.WriteLine("Balanced insert multi threaded, w/ lookup and removal time: {0}", sw.Elapsed.TotalMilliseconds);
+                var rand = new Random();
+                LockHelper lockhelp = new MonitorLockHelper();
 
+                var sw = new System.Diagnostics.Stopwatch();
+
+                int[] range = Enumerable.Range(1, (int)Math.Pow(2.0, 23)).ToArray();
+                //sw.Restart();
+                //var btTestNoLookupSTRand = new btree(lockhelp);
+                //RandomRangeInsert(btTestNoLookupSTRand, range, sw, true);
+                //sw.Stop();
+                //Console.WriteLine("Random insert single threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
+
+                //sw.Restart();
+                //var btTestNoLookupRand = new btree(lockhelp);
+                //RandomRangeInsert(btTestNoLookupRand, range, sw);
+                //Task.WaitAll(wh.ToArray());
+                //sw.Stop();
+                //wh.Clear();
+                //Console.WriteLine("Random insert multi threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
+
+                //sw.Restart();
+                //var btTestNoLookupsST = new btree(lockhelp);
+                //BalancedRangeInsert(btTestNoLookupsST, range, sw, true);
+                //sw.Stop();
+                //Console.WriteLine("Balanced insert single threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
+
+
+                //sw.Restart();
+                //var btTestNoLookups = new btree(lockhelp);
+                //BalancedRangeInsert(btTestNoLookups, range, sw);
+                //Task.WaitAll(wh.ToArray());
+                //sw.Stop();
+                //wh.Clear();
+                //Console.WriteLine("Balanced insert multi threaded time {0}ms for {1} nodes", sw.Elapsed.TotalMilliseconds, (int)Math.Pow(2.0, 24));
+
+                sw.Restart();
+                var bttest = new btree(lockhelp);
+                BalancedRangeInsert(bttest, range, sw);
+
+                var cts = new System.Threading.CancellationTokenSource();
+                var t = new Task(() =>
+                {
+                    bool contains = true;
+                    while (!cts.IsCancellationRequested)
+                    {
+                        contains &= bttest.Contains(rand.Next(1, (int)Math.Pow(2.0, 22)));
+                        System.Threading.Thread.Sleep(1);
+                    }
+                }, cts.Token);
+
+                var t2 = new Task(() =>
+                {
+                    while (!cts.IsCancellationRequested)
+                    {
+                        bttest.Remove(rand.Next(1, (int)Math.Pow(2.0, 22)));
+                        System.Threading.Thread.Sleep(1);
+                    }
+                }, cts.Token);
+                t2.Start();
+                Task.WaitAll(wh.ToArray());
+                sw.Stop();
+                cts.Cancel();
+                Console.WriteLine("Balanced insert multi threaded, w/ lookup and removal time: {0}", sw.Elapsed.TotalMilliseconds);
+            }
             Console.ReadLine();
-
         }
 
         static void BalancedRangeInsert(btree bt, int[] range, System.Diagnostics.Stopwatch sw, bool recursv = false)
